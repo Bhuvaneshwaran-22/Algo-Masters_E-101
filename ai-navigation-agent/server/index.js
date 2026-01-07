@@ -72,21 +72,44 @@ app.get("/website-index", (_req, res) => {
 // Returns matches ranked by relevance + clarification hints
 app.post("/search", (req, res) => {
   const { query = "" } = req.body || {};
-  const q = String(query).toLowerCase();
+  const q = String(query).toLowerCase().trim();
 
-  if (!q.trim()) {
+  if (!q) {
     return res.json({ results: [], message: "Empty query." });
   }
+
+  // Keyword aliases for better matching
+  const aliases = {
+    "javascript": ["js", "script", "javascript"],
+    "js": ["javascript", "js", "script"],
+    "html": ["html", "markup", "structure"],
+    "css": ["css", "style", "styling", "design"],
+    "style": ["css", "style", "styling", "design"],
+    "design": ["css", "style", "styling", "design"]
+  };
+
+  // Get matching keywords for this query
+  const matchKeywords = aliases[q] || [q];
 
   // Score each section against query
   const scored = websiteIndex.map(section => {
     let score = 0;
-    const words = q.split(" ");
+    const titleLower = section.sectionTitle.toLowerCase();
+    const summaryLower = section.sectionSummary.toLowerCase();
 
-    // Title match = higher weight (understanding intent)
+    // Check if any matched keyword is in title or summary
+    matchKeywords.forEach(keyword => {
+      if (titleLower.includes(keyword)) score += 5;
+      if (summaryLower.includes(keyword)) score += 1;
+    });
+
+    // Also check original query words (for longer queries)
+    const words = q.split(" ");
     words.forEach(word => {
-      if (section.sectionTitle.toLowerCase().includes(word)) score += 5;
-      if (section.sectionSummary.toLowerCase().includes(word)) score += 1;
+      if (!matchKeywords.includes(word)) {
+        if (titleLower.includes(word)) score += 3;
+        if (summaryLower.includes(word)) score += 1;
+      }
     });
 
     return { ...section, score };
