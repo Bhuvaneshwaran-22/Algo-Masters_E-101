@@ -78,38 +78,83 @@ app.post("/search", (req, res) => {
     return res.json({ results: [], message: "Empty query." });
   }
 
-  // Keyword aliases for better matching
+  // Keyword aliases and lightweight stemming for broader intent matching
   const aliases = {
-    "javascript": ["js", "script", "javascript"],
-    "js": ["javascript", "js", "script"],
-    "html": ["html", "markup", "structure"],
-    "css": ["css", "style", "styling", "design"],
-    "style": ["css", "style", "styling", "design"],
-    "design": ["css", "style", "styling", "design"]
+    "javascript": ["js", "script", "javascript", "node", "typescript"],
+    "js": ["javascript", "script", "js"],
+    "script": ["javascript", "script", "js"],
+    "typescript": ["ts", "typescript", "javascript"],
+    "html": ["html", "markup", "structure", "document"],
+    "css": ["css", "style", "styling", "design", "layout"],
+    "style": ["css", "style", "design", "theme"],
+    "design": ["css", "style", "design", "ux", "ui"],
+    "layout": ["css", "grid", "flex", "layout"],
+    "api": ["api", "endpoint", "interface"],
+    "function": ["function", "method", "procedure"],
+    "array": ["array", "list", "vector", "collection"],
+    "object": ["object", "json", "dictionary", "map"],
+    "loop": ["loop", "iterate", "iteration", "for", "while"],
+    "error": ["error", "bug", "issue", "problem"],
+    "install": ["install", "installation", "setup", "set up"],
+    "config": ["config", "configuration", "settings"],
+    "login": ["login", "signin", "sign in", "auth", "authenticate"],
+    "intro": ["intro", "introduction", "getting started", "overview"],
+    "tutorial": ["tutorial", "guide", "walkthrough", "how to", "learn"],
+    "example": ["example", "sample", "demo"],
+    "database": ["database", "db", "sql", "nosql"],
+    "network": ["network", "http", "request", "response"],
+    "performance": ["performance", "speed", "optimize", "optimization"],
+    "security": ["security", "auth", "authentication", "authorization", "oauth"],
   };
 
-  // Get matching keywords for this query
-  const matchKeywords = aliases[q] || [q];
+  // Normalize and expand query into keywords (aliases + stems)
+  const normalizeWords = (text) =>
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter(w => w.length > 1);
 
-  // Score each section against query
+  const stem = (word) => {
+    if (word.endsWith("ing") && word.length > 4) return word.slice(0, -3);
+    if (word.endsWith("ed") && word.length > 3) return word.slice(0, -2);
+    if (word.endsWith("es") && word.length > 3) return word.slice(0, -2);
+    if (word.endsWith("s") && word.length > 2) return word.slice(0, -1);
+    return word;
+  };
+
+  const expandedKeywords = (() => {
+    const words = normalizeWords(q);
+    const set = new Set();
+
+    words.forEach(w => {
+      set.add(w);
+      set.add(stem(w));
+      (aliases[w] || []).forEach(a => {
+        set.add(a);
+        set.add(stem(a));
+      });
+    });
+
+    // Also include the full query string for phrase matches
+    if (q.length > 2) set.add(q);
+
+    return Array.from(set).filter(Boolean);
+  })();
+
+  // Score each section against expanded keywords
   const scored = websiteIndex.map(section => {
     let score = 0;
     const titleLower = section.sectionTitle.toLowerCase();
     const summaryLower = section.sectionSummary.toLowerCase();
+    const combined = `${section.sectionTitle} ${section.sectionSummary}`.toLowerCase();
 
-    // Check if any matched keyword is in title or summary
-    matchKeywords.forEach(keyword => {
-      if (titleLower.includes(keyword)) score += 5;
-      if (summaryLower.includes(keyword)) score += 1;
-    });
-
-    // Also check original query words (for longer queries)
-    const words = q.split(" ");
-    words.forEach(word => {
-      if (!matchKeywords.includes(word)) {
-        if (titleLower.includes(word)) score += 3;
-        if (summaryLower.includes(word)) score += 1;
-      }
+    expandedKeywords.forEach(keyword => {
+      if (!keyword) return;
+      if (titleLower.includes(keyword)) score += 6; // strong signal
+      if (summaryLower.includes(keyword)) score += 2;
+      // If full query phrase appears, boost
+      if (keyword === q && combined.includes(keyword)) score += 3;
     });
 
     return { ...section, score };

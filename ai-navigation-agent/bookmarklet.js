@@ -203,9 +203,18 @@
         result.element.style.outline = 'none';
       }, 3000);
     } else if (result.pageURL) {
-      // Cross-page result - navigate to it
-      addMessage(`Going to ${result.pageURL}...`, 'agent');
-      window.location.href = result.pageURL;
+      // Only navigate if same-origin to avoid unwanted redirects
+      try {
+        const target = new URL(result.pageURL, window.location.href);
+        if (target.origin === window.location.origin) {
+          addMessage(`Going to ${result.pageURL}...`, 'agent');
+          window.location.href = result.pageURL;
+        } else {
+          addMessage('Staying on this page (different origin).', 'agent');
+        }
+      } catch (e) {
+        addMessage('Bad target URL, staying here.', 'agent');
+      }
     }
 
     agentState.conversationPhase = 'idle';
