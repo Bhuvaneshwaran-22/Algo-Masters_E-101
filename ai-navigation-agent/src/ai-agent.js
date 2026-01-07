@@ -84,6 +84,102 @@
 
 
   /* =========================
+     ROBUST SCROLLING HELPERS
+     ========================= */
+  function getFixedHeaderHeight() {
+    // Sum heights of fixed/sticky elements at the top
+    let height = 0;
+    document.querySelectorAll("*").forEach(el => {
+      const style = window.getComputedStyle(el);
+      const pos = style.position;
+      const top = parseInt(style.top || "9999");
+      if ((pos === "fixed" || pos === "sticky") && top <= 50) {
+        height = Math.max(height, el.getBoundingClientRect().height);
+      }
+    });
+    return height;
+  }
+
+  function findScrollableContainer(el) {
+    // Traverse up to find a scrollable ancestor
+    let node = el.parentElement;
+    while (node && node !== document.body) {
+      const style = window.getComputedStyle(node);
+      const hasScroll = /auto|scroll/.test(style.overflowY) && node.scrollHeight > node.clientHeight;
+      if (hasScroll) return node;
+      node = node.parentElement;
+    }
+    return null;
+  }
+
+  function expandCollapsed(el) {
+    // Try to expand if inside a collapsed accordion/details
+    let node = el;
+    while (node && node !== document.body) {
+      // details element
+      if (node.tagName === "DETAILS" && !node.open) {
+        node.open = true;
+        console.log("[agent] expanded <details>");
+        return true;
+      }
+      // aria-expanded false
+      if (node.getAttribute("aria-expanded") === "false") {
+        const trigger = node.querySelector("[aria-controls], .accordion-button, summary, .toggle");
+        if (trigger) trigger.click();
+        console.log("[agent] clicked collapse trigger");
+        return true;
+      }
+      node = node.parentElement;
+    }
+    return false;
+  }
+
+  function navigateToElement(el) {
+    // Try multiple methods to ensure visible scroll
+    if (!el) return false;
+
+    // 1. Try to expand if collapsed
+    expandCollapsed(el);
+
+    // 2. Ensure element is visible
+    if (el.style.display === "none") el.style.display = "block";
+    if (el.offsetParent === null) el.style.visibility = "visible";
+
+    // 3. Check if in scrollable container
+    const scrollCont = findScrollableContainer(el);
+    if (scrollCont) {
+      const rect = el.getBoundingClientRect();
+      const offset = el.offsetTop - scrollCont.scrollTop;
+      scrollCont.scrollTo({ top: Math.max(0, offset - 100), behavior: "smooth" });
+      console.log("[agent] scrolled in container");
+    } else {
+      // 4. Use window scroll with fixed header offset
+      const fixedH = getFixedHeaderHeight();
+      const rect = el.getBoundingClientRect();
+      const targetTop = window.scrollY + rect.top - fixedH - 20;
+      window.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
+      console.log("[agent] scrolled with offset");
+    }
+
+    // 5. Fallback: anchor navigation
+    if (!el.id) el.id = "agent-target-" + Math.random().toString(36).slice(2);
+    location.hash = "#" + el.id;
+
+    // 6. Highlight with better visibility
+    el.style.transition = "outline 0.3s ease-in-out";
+    el.style.outline = "4px solid orange";
+    el.style.outlineOffset = "2px";
+    el.style.zIndex = "2147483647";
+
+    setTimeout(() => {
+      el.style.outline = "none";
+      el.style.zIndex = "";
+    }, 3500);
+
+    return true;
+  }
+
+  /* =========================
      BACKEND TOGGLE + SAFE FALLBACK
      ========================= */
   function shouldUseBackend() {
@@ -158,15 +254,7 @@
 
       const el = document.getElementById(best.id);
       if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-
-        // Highlight effect
-        el.style.transition = "outline 0.3s ease-in-out";
-        el.style.outline = "4px solid orange";
-
-        setTimeout(() => {
-          el.style.outline = "none";
-        }, 3000);
+        navigateToElement(el);
       }
     } else {
       // If no clear in-page section, optionally ask backend (on demo pages only)
