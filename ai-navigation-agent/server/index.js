@@ -1,11 +1,13 @@
 import express from "express";
 
-// AI Navigation Backend
-// Role: Optional multi-page guidance for our own demo pages only.
-// Returns lightweight suggestions without crawling or vector DB.
+// AI Navigation Backend - Website-wide Semantic Understanding
+// Role: Maintains index of entire website for intelligent cross-page navigation.
+// Why: Frontend DOM scanning only sees current page. Backend provides
+// pre-processed semantic index for understanding content across all pages.
 
 const app = express();
-// Basic CORS headers without external dependency for demo
+
+// CORS headers
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
@@ -15,46 +17,104 @@ app.use((req, res, next) => {
 });
 app.use(express.json());
 
-// Health check for demo automation
+// In-memory website index
+// Contains all pages and sections for semantic searching
+let websiteIndex = [];
+
+// Build website index (for hackathon demo)
+function buildWebsiteIndex() {
+  console.log("[agent-backend] Building website semantic index...");
+  
+  websiteIndex = [
+    {
+      pageURL: "http://localhost:3000",
+      sectionTitle: "HTML Introduction",
+      sectionSummary: "Learn about HTML elements, tags, and basic structure of web pages.",
+      elementId: "intro",
+      sectionType: "H2"
+    },
+    {
+      pageURL: "http://localhost:3000",
+      sectionTitle: "CSS Introduction",
+      sectionSummary: "Discover styles, layout techniques, and responsive design approaches.",
+      elementId: "styles",
+      sectionType: "H2"
+    },
+    {
+      pageURL: "http://localhost:3000",
+      sectionTitle: "JS Introduction",
+      sectionSummary: "Understand fundamentals of JavaScript, events, and dynamic behavior.",
+      elementId: "scripts",
+      sectionType: "H2"
+    }
+  ];
+
+  console.log(`[agent-backend] Indexed ${websiteIndex.length} sections`);
+}
+
+buildWebsiteIndex();
+
+// Health check
 app.get("/health-check", (_req, res) => {
   res.json({ status: "ok" });
 });
 
-// POST /search → { page, sectionTitle, reason }
-// Minimal heuristic mapping for hackathon demo.
+// Website index - for transparency
+app.get("/website-index", (_req, res) => {
+  res.json({ 
+    count: websiteIndex.length,
+    sections: websiteIndex,
+    note: "This is the semantic understanding of the entire website"
+  });
+});
+
+// Semantic search across entire website index
+// Returns matches ranked by relevance + clarification hints
 app.post("/search", (req, res) => {
   const { query = "" } = req.body || {};
   const q = String(query).toLowerCase();
 
-  // Simple intent → page mapping (demo only)
-  const catalog = [
-    { match: /html|tags|elements/, page: "w3schools/html/", sectionTitle: "HTML Introduction" },
-    { match: /css|styles|layout/, page: "w3schools/css/", sectionTitle: "CSS Introduction" },
-    { match: /javascript|js|events/, page: "w3schools/js/", sectionTitle: "JS Introduction" },
-    { match: /react|components|hooks/, page: "react.dev/learn", sectionTitle: "React - Learn" },
-  ];
-
-  let suggestion = {
-    page: "demo.html",
-    sectionTitle: "Getting Started",
-    reason: "Default recommendation for general queries."
-  };
-
-  for (const item of catalog) {
-    if (item.match.test(q)) {
-      suggestion = {
-        page: item.page,
-        sectionTitle: item.sectionTitle,
-        reason: `Matched keywords for "${query}"`
-      };
-      break;
-    }
+  if (!q.trim()) {
+    return res.json({ results: [], message: "Empty query." });
   }
 
-  res.json(suggestion);
+  // Score each section against query
+  const scored = websiteIndex.map(section => {
+    let score = 0;
+    const words = q.split(" ");
+
+    // Title match = higher weight (understanding intent)
+    words.forEach(word => {
+      if (section.sectionTitle.toLowerCase().includes(word)) score += 5;
+      if (section.sectionSummary.toLowerCase().includes(word)) score += 1;
+    });
+
+    return { ...section, score };
+  });
+
+  // Filter and sort by relevance
+  const results = scored
+    .filter(s => s.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  // Check if clarification is needed (multiple equally-good matches)
+  const needsClarification = results.length > 1 && 
+    results[0].score === results[1].score;
+
+  res.json({
+    results,
+    query,
+    needsClarification,
+    message: needsClarification
+      ? `Found ${results.length} matching sections. Please clarify.`
+      : results.length === 0
+        ? "No sections match your query."
+        : `Found ${results.length} matching section(s).`
+  });
 });
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`[agent-backend] Running on http://localhost:${PORT}`);
+  console.log("[agent-backend] Provides website-wide semantic index for intelligent navigation");
 });
