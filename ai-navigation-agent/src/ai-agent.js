@@ -163,7 +163,7 @@
 
     // 5. Fallback: anchor navigation
     if (!el.id) el.id = "agent-target-" + Math.random().toString(36).slice(2);
-    location.hash = "#" + el.id;
+    window.location.hash = "#" + el.id;
 
     // 6. Highlight with better visibility
     el.style.transition = "outline 0.3s ease-in-out";
@@ -184,8 +184,8 @@
      ========================= */
   function shouldUseBackend() {
     try {
-      const isLocalhost = /localhost|127\.0\.0\.1/.test(location.hostname);
-      const isDemoFile = /demo\.html$/i.test(location.pathname) || location.protocol === "file:";
+      const isLocalhost = /localhost|127\.0\.0\.1/.test(window.location.hostname);
+      const isDemoFile = /demo\.html$/i.test(window.location.pathname) || window.location.protocol === "file:";
       return isLocalhost || isDemoFile;
     } catch (_) {
       return false;
