@@ -136,8 +136,27 @@ app.post("/search", (req, res) => {
   });
 });
 
+// Serve bookmarklet code
+app.get('/bookmarklet.js', async (_req, res) => {
+  try {
+    const fs = await import('fs').then(m => m.default);
+    const path = await import('path').then(m => m.default);
+    const { fileURLToPath } = await import('url').then(m => m);
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    const bookmarkletPath = path.join(__dirname, '..', 'bookmarklet.js');
+    
+    const code = fs.readFileSync(bookmarkletPath, 'utf-8');
+    res.setHeader('Content-Type', 'application/javascript');
+    res.send(code);
+  } catch (err) {
+    console.error('[agent-backend] Error serving bookmarklet:', err.message);
+    res.status(500).json({ error: 'Could not serve bookmarklet' });
+  }
+});
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`[agent-backend] Running on http://localhost:${PORT}`);
-  console.log("[agent-backend] Provides website-wide semantic index for intelligent navigation");
+  console.log('[agent-backend] ✓ Bookmarklet available at http://localhost:5000/bookmarklet.js');
+  console.log('[agent-backend] ✓ Use in any website - works standalone or with backend index');
 });

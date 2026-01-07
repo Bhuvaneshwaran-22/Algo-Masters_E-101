@@ -1,14 +1,16 @@
 import fs from 'fs';
 import http from 'http';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
-const PORT = 3000;
+const PORT = 8888;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const server = http.createServer((req, res) => {
-  let filePath = path.join(process.cwd(), req.url === '/' ? 'demo.html' : req.url);
+  let filePath = path.join(__dirname, req.url === '/' ? 'demo.html' : req.url);
   
   // Prevent directory traversal
-  if (!filePath.startsWith(process.cwd())) {
+  if (!filePath.startsWith(__dirname)) {
     res.writeHead(403, { 'Content-Type': 'text/plain' });
     res.end('Forbidden');
     return;
@@ -32,6 +34,27 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`Demo server running at http://localhost:${PORT}`);
+  console.log('Server is now listening...');
 });
+
+server.on('error', (err) => {
+  console.error('Server error:', err);
+  process.exit(1);
+});
+
+server.on('listening', () => {
+  console.log('Server event: listening');
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+  process.exit(1);
+});
+
+// Keep process alive
+process.stdin.resume();
+
+// Keep the process alive
+process.stdin.resume();
