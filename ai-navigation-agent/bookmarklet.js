@@ -10,8 +10,13 @@
 // PRODUCTION: Change BACKEND_URL to your deployed backend
 
 (function() {
-  // Configuration
-  const BACKEND_URL = 'http://localhost:5000';
+  // Configuration: try HTTPS proxy first to avoid mixed-content, then HTTP on http pages
+  const BACKEND_BASES = (() => {
+    const httpsBase = 'https://localhost:5444';
+    const httpBase = 'http://localhost:5000';
+    if (window.location.protocol === 'https:') return [httpsBase];
+    return [httpsBase, httpBase];
+  })();
   const AGENT_ID = 'universal-ai-nav-agent';
 
   // Don't reinject if already present
@@ -68,22 +73,26 @@
   // STEP 2: SEARCH BACKEND (for cross-page results)
   // ===========================
   async function searchBackend(query) {
-    try {
-      const response = await fetch(`${BACKEND_URL}/search`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query,
-          website: window.location.hostname
-        })
-      });
-      
-      if (!response.ok) throw new Error(`Backend error: ${response.status}`);
-      return await response.json();
-    } catch (err) {
-      console.log('[AI Agent] Backend unavailable, using DOM-only mode');
-      return { results: [], fallbackToDom: true };
+    for (const base of BACKEND_BASES) {
+      try {
+        const response = await fetch(`${base}/search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query,
+            origin: window.location.origin,
+            website: window.location.hostname
+          })
+        });
+        if (!response.ok) throw new Error(`Backend error: ${response.status}`);
+        return await response.json();
+      } catch (err) {
+        console.log('[AI Agent] Backend unavailable at', base, err.message);
+        continue;
+      }
     }
+    console.log('[AI Agent] All backend bases unreachable, using DOM-only mode');
+    return { results: [], fallbackToDom: true };
   }
 
   // ===========================
@@ -123,13 +132,18 @@
     addMessage(query, 'user');
     agentState.conversationPhase = 'searching';
 
-    // First try backend
-    const backendResults = await searchBackend(query);
-    
-    // Fallback to current page if backend unavailable
-    let results = backendResults.fallbackToDom 
-      ? searchCurrentPage(query)
-      : backendResults.results || [];
+    // Refresh on-page snapshot and prefer on-page matches (gives scroll/highlight)
+    scanCurrentPage();
+    const domResults = searchCurrentPage(query);
+    let results = domResults;
+
+    // Only call backend if no on-page matches
+    if (domResults.length === 0) {
+      const backendResults = await searchBackend(query);
+      results = backendResults.fallbackToDom 
+        ? searchCurrentPage(query)
+        : backendResults.results || [];
+    }
 
     if (results.length === 0) {
       addMessage("I couldn't find matching sections. Try asking differently.", 'agent');

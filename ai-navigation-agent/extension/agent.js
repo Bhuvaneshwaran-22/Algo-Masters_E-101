@@ -1,7 +1,12 @@
 // AI Navigator - Chrome/Edge Extension Content Script
 // Bundled (no eval of remote code). Uses the same logic as bookmarklet.js
 (function(){
-  const BACKEND_URL = 'http://localhost:5000';
+  const BACKEND_BASES = (() => {
+    const httpsBase = 'https://localhost:5444';
+    const httpBase = 'http://localhost:5000';
+    if (window.location.protocol === 'https:') return [httpsBase];
+    return [httpsBase, httpBase];
+  })();
   const AGENT_ID = 'universal-ai-nav-agent';
   if (document.getElementById(AGENT_ID)) return;
 
@@ -59,14 +64,18 @@
   }
 
   async function searchBackend(query){
-    try{
-      const res=await fetch(`${BACKEND_URL}/search`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query,website:location.hostname})});
-      if(!res.ok) throw new Error('HTTP '+res.status);
-      return await res.json();
-    }catch(e){
-      log('Backend unavailable, DOM-only mode');
-      return {results:[], fallbackToDom:true};
+    for(const base of BACKEND_BASES){
+      try{
+        const res=await fetch(`${base}/search`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query, origin: location.origin, website: location.hostname})});
+        if(!res.ok) throw new Error('HTTP '+res.status);
+        return await res.json();
+      }catch(e){
+        log('Backend unavailable at', base, e.message);
+        continue;
+      }
     }
+    log('All backends unreachable, DOM-only mode');
+    return {results:[], fallbackToDom:true};
   }
 
   function searchCurrentPage(query){
@@ -87,8 +96,14 @@
     inputBox.value='';
     addMessage(query,'user');
     agentState.conversationPhase='searching';
-    const backendResults=await searchBackend(query);
-    const results=backendResults.fallbackToDom?searchCurrentPage(query):(backendResults.results||[]);
+
+    // Prefer on-page matches (gives scroll-to + highlight). Use backend only if none.
+    const domResults=searchCurrentPage(query);
+    let results=domResults;
+    if(domResults.length===0){
+      const backendResults=await searchBackend(query);
+      results=backendResults.fallbackToDom?searchCurrentPage(query):(backendResults.results||[]);
+    }
     if(results.length===0){ addMessage("I couldn't find matching sections. Try asking differently.",'agent'); agentState.conversationPhase='idle'; return; }
     if(results.length===1){ presentConfirmation(results[0]); } else { askClarification(results.slice(0,3)); }
   }
