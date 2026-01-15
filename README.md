@@ -40,7 +40,7 @@ cd Algo-Masters_E-101
 
 # Install dependencies
 npm install
-cd ai-navigation-agent/server && npm install && cd ../..
+cd ai-navigation-agent/server &amp;&amp; npm install &amp;&amp; cd ../..
 
 # Terminal 1: Start backend
 cd ai-navigation-agent/server
